@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prank IVR</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <main>
+    <div class="top">
+      <div>
+        <small>IVR CONTROL PANEL</small>
+        <h1>Prank IVR 🤖</h1>
+        <p>Editează mesajele care vor fi folosite de sistem.</p>
+      </div>
+
+      <div id="status">Offline</div>
+    </div>
+
+    <section id="loginBox" class="card">
+      <h2>Autentificare</h2>
+
+      <input
+        id="password"
+        type="password"
+        placeholder="Parola administratorului"
+      >
+
+      <button onclick="login()">Intră</button>
+
+      <p id="error"></p>
+    </section>
+
+    <section id="panel" class="card hidden">
+
+      <label>
+        Mesaj principal
+        <textarea id="welcome"></textarea>
+      </label>
+
+      <div class="grid">
+
+        <label>
+          <b>1️⃣ Tasta 1</b>
+          <textarea id="one"></textarea>
+        </label>
+
+        <label>
+          <b>2️⃣ Tasta 2</b>
+          <textarea id="two"></textarea>
+        </label>
+
+        <label>
+          <b>3️⃣ Tasta 3</b>
+          <textarea id="three"></textarea>
+        </label>
+
+      </div>
+
+      <label>
+        Tastă necunoscută
+        <textarea id="invalid"></textarea>
+      </label>
+
+      <button onclick="save()">💾 Salvează</button>
+
+      <p id="saved"></p>
+
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
