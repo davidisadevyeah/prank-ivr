@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#08090d">
+<title>Screenly — Screen Sharing</title>
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<style>
+:root{--bg:#08090d;--panel:#11131a;--panel2:#191c25;--line:#2a2e3a;--text:#f7f8fb;--muted:#969baa;--accent:#5865f2;--danger:#ed4245;--green:#3ba55c}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+button,input{font:inherit}button{cursor:pointer}
+.hidden{display:none!important}
+#home{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{width:min(560px,100%);background:linear-gradient(180deg,#12151d,#0f1117);border:1px solid var(--line);border-radius:24px;padding:38px;box-shadow:0 25px 80px #0008}
+.brand{display:flex;align-items:center;gap:11px;font-size:24px;font-weight:850}
+.brandmark{width:38px;height:38px;border-radius:11px;background:var(--accent);display:grid;place-items:center}
+h1{font-size:42px;line-height:1.02;letter-spacing:-2px;margin:38px 0 14px}
+.grad{background:linear-gradient(90deg,#fff,#8f98ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--muted);line-height:1.55;margin-bottom:28px}
+.row{display:flex;gap:10px}.row input{flex:1;min-width:0}
+input{background:#191c25;border:1px solid #303441;color:#fff;border-radius:12px;padding:13px 14px;outline:0}
+input:focus{border-color:var(--accent)}
+.btn{border:0;border-radius:12px;padding:13px 18px;font-weight:750;transition:.15s}
+.btn.primary{background:var(--accent);color:#fff}.btn.primary:hover{filter:brightness(1.08)}
+.btn.secondary{background:#222631;color:#fff;border:1px solid #303441}.btn.secondary:hover{background:#292d38}
+.tip{margin-top:20px;color:#707687;font-size:12px;line-height:1.5}
+#app{height:100vh;display:none;flex-direction:column}
+header{height:64px;flex:none;background:#101219;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 18px}
+.header-left,.header-right{display:flex;align-items:center;gap:10px}
+.room-code{font:600 13px ui-monospace,SFMono-Regular,Menlo,monospace;background:#1b1e27;border:1px solid #2b2f3a;color:#b8bdcb;padding:7px 10px;border-radius:8px}
+.pill{font-size:12px;color:#aeb4c2;background:#191c24;padding:7px 10px;border-radius:999px}
+#stage{position:relative;flex:1;min-height:0;background:#050609;display:flex;align-items:center;justify-content:center;padding:18px}
+#remote{width:100%;height:100%;object-fit:contain;border-radius:12px;background:#000;display:none}
+#localPreview{position:absolute;right:30px;bottom:28px;width:210px;height:130px;object-fit:cover;background:#000;border:2px solid #555;border-radius:12px;display:none}
+.empty{text-align:center;color:var(--muted)}.emptyIcon{font-size:56px;margin-bottom:12px}.empty h2{color:#fff;margin:0 0 7px}.empty p{margin:0;font-size:14px}
+#controls{height:84px;flex:none;background:#101219;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px}
+.control{width:48px;height:48px;border-radius:50%;border:1px solid #303441;background:#20232d;color:#fff;font-size:18px}
+.control.active{background:var(--accent);border-color:var(--accent)}
+.control.danger{width:64px;border-radius:13px;background:var(--danger);border-color:var(--danger)}
+#toast{position:fixed;left:50%;bottom:105px;transform:translate(-50%,20px);background:#181b23;border:1px solid #333744;border-radius:10px;padding:10px 15px;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:20}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#statusDot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block}
+@media(max-width:650px){.card{padding:26px}h1{font-size:36px}.row{flex-direction:column}.row .btn{width:100%}.header-left .brand{font-size:18px}.header-left .brandmark{width:31px;height:31px}.pill{display:none}header{padding:0 10px}.room-code{display:none}#localPreview{width:130px;height:90px;right:12px;bottom:15px}}
+</style>
+</head>
+<body>
+<section id="home">
+  <div class="card">
+    <div class="brand"><div class="brandmark">▣</div>Screenly</div>
+    <h1>Share your screen.<br><span class="grad">Instantly.</span></h1>
+    <div class="sub">Create a room, share the link, and stream your screen directly to another browser.</div>
+    <button class="btn primary" style="width:100%;margin-bottom:10px" id="createBtn">Create room</button>
+    <div class="row">
+      <input id="joinInput" placeholder="Paste room code or invite link" autocomplete="off">
+      <button class="btn secondary" id="joinBtn">Join room</button>
+    </div>
+    <div class="tip">The website itself can be hosted on InfinityFree. PeerJS Cloud is used only for connection signaling; the media stream is peer-to-peer WebRTC. HTTPS is required for screen capture.</div>
+  </div>
+</section>
+
+<section id="app">
+<header>
+  <div class="header-left">
+    <div class="brand"><div class="brandmark">▣</div>Screenly</div>
+    <span class="pill"><span id="statusDot"></span> <span id="connectionText">Connecting</span></span>
+    <span class="room-code" id="roomCode"></span>
+  </div>
+  <div class="header-right">
+    <button class="btn secondary" id="copyBtn">🔗 Copy invite</button>
+    <button class="btn secondary" id="leaveBtn">Leave</button>
+  </div>
+</header>
+<main id="stage">
+  <div class="empty" id="empty">
+    <div class="emptyIcon">🖥️</div>
+    <h2 id="emptyTitle">Ready to share</h2>
+    <p id="emptyText">Start sharing your screen when you're ready.</p>
+  </div>
+  <video id="remote" autoplay playsinline controls></video>
+  <video id="localPreview" autoplay muted playsinline></video>
+</main>
+<div id="controls">
+  <button class="control" id="screenBtn" title="Share screen">🖥️</button>
+  <button class="control" id="micBtn" title="Microphone">🎙️</button>
+  <button class="control" id="cameraBtn" title="Camera">📷</button>
+  <button class="control" id="fullscreenBtn" title="Fullscreen">⛶</button>
+  <button class="control danger" id="stopBtn" title="Stop sharing">■</button>
+</div>
+</section>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const home=$("home"), app=$("app"), remote=$("remote"), localPreview=$("localPreview");
+const empty=$("empty"), emptyTitle=$("emptyTitle"), emptyText=$("emptyText");
+const screenBtn=$("screenBtn"), micBtn=$("micBtn"), cameraBtn=$("cameraBtn");
+let peer=null, roomId=null, isHost=false, hostId=null;
+let screenStream=null, micStream=null, cameraStream=null;
+let calls=new Map(), viewers=new Set(), readyConnections=new Map();
+let initialized=false;
+
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove("show"),2600)}
+function setConnection(text){$("connectionText").textContent=text}
+function randomId(){return "screenly-"+crypto.randomUUID().replaceAll("-","").slice(0,20)}
+function extractRoom(value){
+  value=value.trim();
+  try{const u=new URL(value); return u.searchParams.get("room")||value}catch{return value}
+}
+function inviteUrl(){return location.origin+location.pathname+"?room="+encodeURIComponent(roomId)}
+function showApp(){
+  home.style.display="none"; app.style.display="flex"; $("roomCode").textContent=roomId;
+}
+function setEmpty(title,text){emptyTitle.textContent=title;emptyText.textContent=text;empty.classList.remove("hidden")}
+function hideEmpty(){empty.classList.add("hidden")}
+
+function initPeer(id, host){
+  if(initialized)return;
+  initialized=true; isHost=host;
+  roomId=id;
+  showApp();
+  setConnection("Connecting");
+  peer=new Peer(id,{debug:1});
+  peer.on("open",actualId=>{
+    if(isHost){roomId=actualId;$("roomCode").textContent=actualId;history.replaceState({}, "", "?room="+encodeURIComponent(actualId));setConnection("Room ready");setEmpty("Ready to share","Copy the invite and start sharing your screen.");}
+    else {setConnection("Connected to signaling"); connectToHost(hostId);}
+  });
+  peer.on("error",e=>{
+    console.error(e);
+    if(e.type==="peer-unavailable")toast("Room not found or the host is offline.");
+    else if(e.type==="unavailable-id"){toast("Room ID collision. Try again.");}
+    else toast("Connection error: "+e.type);
+    setConnection("Error");
+  });
+  peer.on("disconnected",()=>setConnection("Signaling offline"));
+  peer.on("close",()=>setConnection("Closed"));
+
+  peer.on("connection",conn=>{
+    conn.on("open",()=>{
+      if(isHost){
+        viewers.add(conn.peer); readyConnections.set(conn.peer,conn);
+        conn.send({type:"room-info",host:true});
+        if(screenStream) callViewer(conn.peer);
+      }
+    });
+    conn.on("data",data=>{
+      if(data && data.type==="viewer-ready" && isHost){
+        viewers.add(conn.peer); readyConnections.set(conn.peer,conn);
+        if(screenStream) callViewer(conn.peer);
+      }
+    });
+    conn.on("close",()=>{viewers.delete(conn.peer);readyConnections.delete(conn.peer);closeCall(conn.peer)});
+  });
+
+  peer.on("call",call=>{
+    call.answer();
+    call.on("stream",stream=>{
+      remote.srcObject=stream; remote.style.display="block"; hideEmpty(); setConnection("Live");
+    });
+    call.on("close",()=>{remote.srcObject=null;remote.style.display="none";setEmpty("Waiting for screen","The host stopped sharing.");});
+    call.on("error",e=>console.error("call",e));
+    calls.set(call.peer,call);
+  });
+}
+
+function createRoom(){
+  if(initialized)return;
+  const id=randomId();
+  initPeer(id,true);
+}
+function joinRoom(){
+  if(initialized)return;
+  const code=extractRoom($("joinInput").value);
+  if(!code){toast("Enter a room code or invite link.");return}
+  hostId=code;
+  initPeer(randomId(),false);
+}
+function connectToHost(host){
+  const conn=peer.connect(host,{reliable:true});
+  conn.on("open",()=>{
+    conn.send({type:"viewer-ready"});
+    setConnection("Waiting for host");
+    setEmpty("Waiting for screen","The host has not started sharing yet.");
+  });
+  conn.on("error",e=>console.error(e));
+}
+async function callViewer(viewerId){
+  if(!screenStream || !peer)return;
+  closeCall(viewerId);
+  const call=peer.call(viewerId,screenStream);
+  calls.set(viewerId,call);
+  call.on("close",()=>calls.delete(viewerId));
+  call.on("error",e=>console.error("outgoing call",e));
+}
+function closeCall(id){const c=calls.get(id);if(c){try{c.close()}catch{}calls.delete(id)}}
+
+async function startScreen(){
+  if(!isHost){toast("Only the room creator can share the screen.");return}
+  if(screenStream){stopScreen();return}
+  if(!window.isSecureContext){toast("This page is not HTTPS. InfinityFree SSL must be enabled.");return}
+  try{
+    screenStream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30,max:60}},audio:true});
+    updateLocalPreview();
+    screenBtn.classList.add("active");
+    screenStream.getVideoTracks()[0].addEventListener("ended",stopScreen);
+    for(const id of viewers) await callViewer(id);
+    setEmpty("Sharing your screen","Your screen is being streamed to viewers.");
+    hideEmpty();
+    toast("Screen sharing started.");
+  }catch(e){console.error(e);toast(e.name==="NotAllowedError"?"Screen sharing cancelled.":"Could not start screen sharing.");}
+}
+function stopScreen(){
+  if(screenStream){screenStream.getTracks().forEach(t=>t.stop());screenStream=null}
+  for(const id of [...calls.keys()])closeCall(id);
+  screenBtn.classList.remove("active");
+  updateLocalPreview();
+  setEmpty("Ready to share","Start sharing your screen when you're ready.");
+  if(isHost) for(const id of viewers) readyConnections.get(id)?.send({type:"screen-stopped"});
+}
+async function toggleMic(){
+  if(!isHost){toast("Only the host can control the shared microphone.");return}
+  if(micStream){
+    micStream.getTracks().forEach(t=>t.stop());micStream=null;micBtn.classList.remove("active");toast("Microphone off.");return;
+  }
+  try{
+    micStream=await navigator.mediaDevices.getUserMedia({audio:true});
+    micBtn.classList.add("active");toast("Microphone on.");
+    if(screenStream){await rebuildStreamCalls()}
+  }catch(e){toast("Microphone permission denied.");}
+}
+async function toggleCamera(){
+  if(!isHost){toast("Only the host can control the camera.");return}
+  if(cameraStream){
+    cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;cameraBtn.classList.remove("active");updateLocalPreview();await rebuildStreamCalls();return;
+  }
+  try{
+    cameraStream=await navigator.mediaDevices.getUserMedia({video:true});
+    cameraBtn.classList.add("active");updateLocalPreview();
+    if(screenStream)await rebuildStreamCalls();
+  }catch(e){toast("Camera permission denied.");}
+}
+function combinedStream(){
+  const s=new MediaStream();
+  if(screenStream)screenStream.getVideoTracks().forEach(t=>s.addTrack(t));
+  if(cameraStream)cameraStream.getVideoTracks().forEach(t=>s.addTrack(t));
+  if(screenStream)screenStream.getAudioTracks().forEach(t=>s.addTrack(t));
+  if(micStream)micStream.getAudioTracks().forEach(t=>s.addTrack(t));
+  return s;
+}
+async function rebuildStreamCalls(){
+  if(!screenStream)return;
+  const stream=combinedStream();
+  for(const id of viewers){
+    closeCall(id);
+    const call=peer.call(id,stream);
+    calls.set(id,call);
+    call.on("close",()=>calls.delete(id));
+  }
+}
+function updateLocalPreview(){
+  if(!isHost)return;
+  const s=combinedStream();
+  if(s.getVideoTracks().length){localPreview.srcObject=s;localPreview.style.display="block"}else{localPreview.srcObject=null;localPreview.style.display="none"}
+}
+function stopAll(){
+  if(screenStream)stopScreen();
+  if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null}
+  if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}
+  micBtn.classList.remove("active");cameraBtn.classList.remove("active");screenBtn.classList.remove("active");updateLocalPreview();
+}
+async function copyInvite(){
+  if(!roomId)return;
+  try{await navigator.clipboard.writeText(inviteUrl());toast("Invite link copied!")}
+  catch{toast(inviteUrl())}
+}
+function leave(){
+  stopAll();for(const id of [...calls.keys()])closeCall(id);
+  if(peer){try{peer.destroy()}catch{}}
+  location.href=location.pathname;
+}
+function fullscreen(){const target=remote.style.display==="block"?remote:$("stage");if(!document.fullscreenElement)target.requestFullscreen?.();else document.exitFullscreen?.()}
+
+$("createBtn").onclick=createRoom;
+$("joinBtn").onclick=joinRoom;
+$("joinInput").onkeydown=e=>{if(e.key==="Enter")joinRoom()};
+screenBtn.onclick=startScreen;micBtn.onclick=toggleMic;cameraBtn.onclick=toggleCamera;
+$("stopBtn").onclick=stopAll;$("copyBtn").onclick=copyInvite;$("leaveBtn").onclick=leave;$("fullscreenBtn").onclick=fullscreen;
+
+window.addEventListener("beforeunload",()=>{try{stopAll();peer?.destroy()}catch{}});
+
+const urlRoom=new URLSearchParams(location.search).get("room");
+if(urlRoom){hostId=urlRoom;initPeer(randomId(),false)}
+</script>
+</body>
+</html>
