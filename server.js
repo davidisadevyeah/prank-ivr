@@ -39,6 +39,14 @@ function auth(req, res, next) {
   next();
 }
 
+function twiml(text) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">${text}</Say>
+  <Hangup/>
+</Response>`;
+}
+
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
@@ -66,25 +74,40 @@ app.post("/api/messages", auth, (req, res) => {
   });
 });
 
-/*
-  Endpoint pregatit pentru providerul de telefonie.
-  Providerul va trimite aici informatia despre cifra DTMF.
-*/
-app.post("/ivr", (req, res) => {
+// Twilio raspunde la apel
+app.post("/voice", (req, res) => {
+  const messages = getMessages();
+
+  res.type("text/xml");
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather input="dtmf" numDigits="1" action="/gather" method="POST">
+    <Say voice="alice">
+      ${messages.welcome}
+    </Say>
+  </Gather>
+
+  <Say voice="alice">
+    ${messages.invalid}
+  </Say>
+
+  <Redirect method="POST">/voice</Redirect>
+</Response>`);
+});
+
+// Utilizatorul a apasat o tasta
+app.post("/gather", (req, res) => {
   const messages = getMessages();
   const digit = String(req.body.Digits || "");
 
-  const response = {
-    welcome: messages.welcome,
-    digit,
-    message:
-      digit === "1" ? messages.one :
-      digit === "2" ? messages.two :
-      digit === "3" ? messages.three :
-      messages.invalid
-  };
+  let message = messages.invalid;
 
-  res.json(response);
+  if (digit === "1") message = messages.one;
+  if (digit === "2") message = messages.two;
+  if (digit === "3") message = messages.three;
+
+  res.type("text/xml");
+  res.send(twiml(message));
 });
 
 app.listen(PORT, "0.0.0.0", () => {
