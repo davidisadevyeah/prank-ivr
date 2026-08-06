@@ -1,19 +1,26 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const twilio = require("twilio");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "change-me";
 
+const client = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const file = path.join("/tmp", "messages.json");
 
 const defaults = {
-  welcome: "Salut! Pentru varianta unu apasa 1. Pentru varianta doi apasa 2. Pentru surpriza apasa 3.",
+  welcome:
+    "Salut! Pentru varianta unu apasa 1. Pentru varianta doi apasa 2. Pentru surpriza apasa 3.",
   one: "Ai ales varianta unu!",
   two: "Ai ales varianta doi!",
   three: "Surpriza! Acesta a fost un prank!",
@@ -34,21 +41,26 @@ function getMessages() {
 
 function auth(req, res, next) {
   if (req.headers["x-admin-password"] !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: "Parola incorecta." });
+    return res.status(401).json({
+      error: "Parola incorecta."
+    });
   }
+
   next();
 }
 
-function twiml(text) {
+function twimlSay(text) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">${text}</Say>
-  <Hangup/>
+<Say voice="alice">${text}</Say>
+<Hangup/>
 </Response>`;
 }
 
 app.get("/health", (req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true
+  });
 });
 
 app.get("/api/messages", auth, (req, res) => {
@@ -74,40 +86,94 @@ app.post("/api/messages", auth, (req, res) => {
   });
 });
 
-// Twilio raspunde la apel
+/*
+    TWILIO - cand raspunzi la apel
+*/
+
 app.post("/voice", (req, res) => {
   const messages = getMessages();
 
   res.type("text/xml");
+
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="dtmf" numDigits="1" action="/gather" method="POST">
-    <Say voice="alice">
-      ${messages.welcome}
-    </Say>
-  </Gather>
 
-  <Say voice="alice">
-    ${messages.invalid}
-  </Say>
+<Gather
+input="dtmf"
+numDigits="1"
+action="/gather"
+method="POST">
 
-  <Redirect method="POST">/voice</Redirect>
+<Say voice="alice">
+${messages.welcome}
+</Say>
+
+</Gather>
+
+<Say voice="alice">
+${messages.invalid}
+</Say>
+
+<Redirect method="POST">
+/voice
+</Redirect>
+
 </Response>`);
 });
 
-// Utilizatorul a apasat o tasta
+/*
+    DTMF
+*/
+
 app.post("/gather", (req, res) => {
   const messages = getMessages();
+
   const digit = String(req.body.Digits || "");
 
-  let message = messages.invalid;
+  let text = messages.invalid;
 
-  if (digit === "1") message = messages.one;
-  if (digit === "2") message = messages.two;
-  if (digit === "3") message = messages.three;
+  if (digit === "1") text = messages.one;
+  if (digit === "2") text = messages.two;
+  if (digit === "3") text = messages.three;
 
   res.type("text/xml");
-  res.send(twiml(message));
+  res.send(twimlSay(text));
+});
+
+/*
+    Robotul te suna
+*/
+
+app.get("/call", async (req, res) => {
+  try {
+
+    const call = await client.calls.create({
+
+      to: process.env.MY_PHONE_NUMBER,
+
+      from: process.env.TWILIO_PHONE_NUMBER,
+
+      url: "https://prank-ivr.onrender.com/voice",
+
+      method: "POST"
+
+    });
+
+    res.json({
+      success: true,
+      sid: call.sid
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+
+  }
 });
 
 app.listen(PORT, "0.0.0.0", () => {
